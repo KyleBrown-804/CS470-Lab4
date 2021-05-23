@@ -1,0 +1,5 @@
+[Server]
+    g++ -o hotel utilities.cpp Server.cpp -pthread
+
+[Client]
+    g++ -o agency utilities.cpp Client.cpp -pthread

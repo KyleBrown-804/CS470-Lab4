@@ -7,8 +7,8 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <pthread.h>
 
-// C++
 #include <iostream>
 #include <cstdio>
 #include <string>
@@ -17,5 +17,7 @@
 #include <errno.h>
 #include <ctime> 
 #include <cmath>
+
+bool isValidNum(std::string str);
 
 #endif
