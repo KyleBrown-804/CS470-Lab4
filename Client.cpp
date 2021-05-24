@@ -1,7 +1,7 @@
 #include "headers.h"
 
 int PORT;
-char mode; // m for manual & a for automatic
+char MODE; // m for manual & a for automatic
 char* IP_ADDR;
 std::string USAGE = "Usage: \n<Executable> <IP Address> <Port> <Mode>\n"
                     "Note: Do not include a ':' within the address or port\n"
@@ -29,9 +29,9 @@ bool isValidArgs(char** args) {
 
     std::string str = args[3];
     if (str == "manual")
-        mode = 'm';
+        MODE = 'm';
     else if (str == "automatic")
-        mode = 'a';
+        MODE = 'a';
     else {
         std::cout << "\nMode is invalid\n\n" << USAGE << std::endl;
         return false;
@@ -41,6 +41,69 @@ bool isValidArgs(char** args) {
     IP_ADDR = args[1];
 
     return true;
+}
+
+bool isValidSpace(int x, int max) {
+    if (x > 0 && x <= max)
+        return true;
+    return false;
+}
+
+void runAutomaticMode(int socketfd, int floors, int rooms, int rLeft, int clientPid) {
+
+    // Keeps running until all rooms are reserved
+    while (1) {
+        
+
+    }
+}
+
+void runManualMode(int socketfd, int floors, int rooms, int rLeft, int clientPid) {
+    printf("floors: %d  rooms: %d\n", floors, rooms);
+
+    while (rLeft > 0) {
+        int f_choice = 0, r_choice = 0;
+        std::string f;
+        std::string r;
+
+        // Checks for valid floor from user
+        printf("\nWhat floor would you like? (Choose between 1-%d)\n", floors);
+        std::getline(std::cin, f);
+        while (! isValidNum(f)) {
+            printf("Invalid entry, try again\n");
+            printf("\nWhat floor would you like? (Choose between 1-%d)\n", floors);
+            std::getline(std::cin, f);
+        }
+
+        f_choice = std::stoi(std::string(f));
+        if (! isValidSpace(f_choice, floors)) {
+            printf("Invalid floor entered, try again\n");
+            continue;
+        }
+
+        // Checks for valid room number from user
+        printf("\nWhat room number on that floor would you like? (Choose between 1-%d)\n", rooms);
+        std::getline(std::cin, r);
+        while (! isValidNum(r)) {
+            printf("Invalid entry, try again\n");
+            printf("\nWhat room number on that floor would you like? (Choose between 1-%d)\n", rooms);
+            std::getline(std::cin, r);
+        }
+
+        r_choice = std::stoi(std::string(r));
+        if (! isValidSpace(r_choice, rooms)) {
+            printf("Invalid room number entered, try again\n");
+            continue;
+        }
+
+        // Sends the desired room to the server to check if it is available for booking
+        else {
+            printf("\nThis is where a booking request would be sent out\n");
+            printf("f_choice: %d  r_choice: %d\n", f_choice, r_choice);
+        }
+    }
+
+    printf("[Client] There are no more rooms available the connection will now close\n");
 }
 
 int main(int argc, char** argv) {
@@ -75,12 +138,22 @@ int main(int argc, char** argv) {
         return 1;
     } 
 
-    // Need to try multiple connection attempts 3 attempts/ 10 sec cap
-    if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
-        fprintf(stderr, "[Client #%d] Error: %s\n", clientPid, strerror(errno));
-        return 1;
-    } else {
-        printf("\n[Client #%d] Connection to server established at %s:%d\n", clientPid, IP_ADDR, PORT);
+    // Attempts to connect to the server over a 12 second interval and exits
+    // if a connection could not be made after 4 failed attempts
+    for (int i = 0; i < 4; i++) {
+        if (connect(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
+            fprintf(stderr, "[Client #%d] Error: %s\n", clientPid, strerror(errno));
+            if (i == 3) {
+                printf("\n4 Attempts were made to connect and all failed, please check that the server is online\n\n");
+                return 1;
+            }
+            printf("[Client #%d] Retrying connection in 3 seconds...\n", clientPid);
+            sleep(3);
+        } 
+        else {
+            printf("\n[Client #%d] Connection to server established at %s:%d\n", clientPid, IP_ADDR, PORT);
+            break;
+        }
     }
 
     // Sending the client PID as a unique identifier to the server
@@ -88,17 +161,36 @@ int main(int argc, char** argv) {
         fprintf(stderr, "[Client #%d] Error: failed to send pid to server\n%s\n", clientPid, strerror(errno));
     }
 
-    while ((n = read(sockfd, recvBuff, sizeof(recvBuff)-1)) > 0) {
-        recvBuff[n] = 0;
-        if(fputs(recvBuff, stdout) == EOF)
-        {
-            printf("\n Error : Fputs error\n");
-        }
-    } 
-
+    // Reads in intial hotel message stating dimensions and rooms availible
+    n = read(sockfd, recvBuff, sizeof(recvBuff)-1);
+    printf("%s", recvBuff);
     if (n < 0) {
-        printf("\n Read error \n");
-    } 
+        printf("\n[Client #%d] Error reading in initial hotel message\n", clientPid);
+        return 1;
+    }
+
+    // Reads in dimensions and rooms available for client side error checking
+    int dimens[] = {0, 0, 0};
+    n = 0;
+    n = read(sockfd, &dimens, sizeof(dimens));
+    if (n < 0) {
+        printf("\n[Client #%d] Error reading in dimensions from hotel\n", clientPid);
+        return 1;
+    }
+
+    // Additional case check to assure that proper dimensions were sent
+    if (dimens[0] == 0 || dimens[1] == 0 || dimens[2] == 0) {
+        printf("\n[Client #%d] Error reading in dimensions from hotel\n", clientPid);
+        return 1;
+    }
+
+    printf("floors: %d   rooms: %d   allRooms: %d\n", dimens[0], dimens[1], dimens[2]);
+
+    // [ ----- Manual / Automatic running modes ----- ]
+    if (MODE == 'm')
+        runManualMode(sockfd, dimens[0], dimens[1], dimens[2], clientPid);
+    else
+        runAutomaticMode(sockfd, dimens[0], dimens[1], dimens[2], clientPid);
 
     close(sockfd);
     return 0;

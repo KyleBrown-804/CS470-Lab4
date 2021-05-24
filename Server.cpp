@@ -33,8 +33,13 @@ int getRoomsLeft(int** hotel) {
                 ++roomsLeft;
         }
     }
-
     return roomsLeft;
+}
+
+// Continuously handles booking requests and alerts clients if available or not
+int handleRequests(int connfd) {
+
+    return 0;
 }
 
 int main(int argc, char** argv) {
@@ -108,7 +113,8 @@ int main(int argc, char** argv) {
         // Terminates server loop and exits if the hotel is completely booked
         int currRooms = getRoomsLeft(hotelRooms);
         if (currRooms == 0) {
-            std::cout << "[Server] The hotel is completely booked on reservations\n" << "Please check again with us in a few days\n" << std::endl;
+            std::cout << "[Server] The hotel is completely booked on reservations\n" << 
+            "Please check again with us in a few days\n" << std::endl;
             break;
         }
 
@@ -134,8 +140,14 @@ int main(int argc, char** argv) {
         sprintf(sendBuff,"\n[Server] Our hotel currently has %d rooms available.\n"
         "We have %d floors and %d rooms per floor, for a total of %d suites\n"
         "What room would you like to reserve?\n", currRooms, FLOORS, F_ROOMS, (FLOORS * F_ROOMS));
-        
         write(connfd, sendBuff, strlen(sendBuff)); 
+
+        // sending dimensions as two ints [floors, rooms]
+        int dimensions[] = {FLOORS, F_ROOMS, currRooms};
+        write(connfd, dimensions, sizeof(dimensions));
+
+        // Handles incoming requests from multiple clients
+        int exitStatus = handleRequests(connfd);
 
         // Closes file descriptor associated with client socket connection
         close(connfd);

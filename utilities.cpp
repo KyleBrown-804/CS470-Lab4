@@ -7,8 +7,13 @@ bool isValidNum(std::string str) {
         }
     }
 
-    if (std::stoi(str) <= 0)
+    try {
+        if (std::stoi(str) <= 0)
+            return false;
+    }
+    catch (std::invalid_argument& e) {
         return false;
+    }
 
     return true;
 }

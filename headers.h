@@ -16,6 +16,7 @@
 #include <sstream>
 #include <cstdlib>
 #include <cstring>
+#include <stdexcept>
 #include <errno.h>
 #include <ctime> 
 #include <cmath>
