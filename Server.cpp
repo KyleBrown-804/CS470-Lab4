@@ -1,4 +1,5 @@
 #include "headers.h"
+#define MAX_BUFF 1024
 
 int PORT;
 int FLOORS = 10;
@@ -24,22 +25,30 @@ bool isValidArgs(int argc, char** args) {
     return true;
 }
 
+int getRoomsLeft(int** hotel) {
+    int roomsLeft = 0;
+    for (int i = 0; i < FLOORS; i++) {
+        for (int j = 0; j < F_ROOMS; j++) {
+            if (hotel[i][j] == 0)
+                ++roomsLeft;
+        }
+    }
+
+    return roomsLeft;
+}
+
 int main(int argc, char** argv) {
 
-    std::cout << "argc: " << argc << "\n" << std::endl;
     if (argc != 2 && argc != 4) {
         std::cout << USAGE << std::endl;
         return 1;
     }
 
-    // REMAKE A HELPER FUNCTION TO CHECK IF ONE STRING IS A VALID NUMBER
     if (!isValidArgs(argc, argv))
         return 1;
 
-    std::cout << "PORT: " << PORT << " FLOORS: " << FLOORS << " F_ROOMS: " << F_ROOMS << "\n" << std::endl;
-    
-    // Declaring a 2D array of size M x N (Floors x Rooms)
-    // extra checks are made in the case of malloc failure
+    // [ ----- Creating hotel with (Floors * Rooms) dimensions ----- ]
+    // [Note] extra checks are made in the case of malloc failure
     int** hotelRooms = (int**) malloc(FLOORS * sizeof(int*));
     if (! hotelRooms) {
         std::cout << "An error occured while trying to malloc\n" << "\n" << std::endl;
@@ -54,10 +63,88 @@ int main(int argc, char** argv) {
         }
     }
 
+    // [ ----- Starting server connection ----- ]
+    int sockfd = 0, connfd = 0;
+    struct sockaddr_in serv_addr;
+    char sendBuff[MAX_BUFF]; // [Note] might need to calculate buffer size needed to send data
 
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0)
+        fprintf(stderr, "[Server] Error: %s\n", strerror(errno));
 
+    /*
+    *  Allows resuing the same Address/Port in the event that the server previously crashed
+    *  or was terminated early with an interrupt. The setsocketopt() calls below are borrowed from:
+    *  https://stackoverflow.com/questions/24194961/how-do-i-use-setsockoptso-reuseaddr/25193462
+    */
+    int enable = 1;
+    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable)) < 0)
+        fprintf(stderr, "[Server] Error: %s\n", strerror(errno));
 
-    // [ ----- DEALLOCATIONS ----- ]
+    #ifdef SO_REUSEPORT
+    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEPORT, &enable, sizeof(enable)) < 0) 
+        fprintf(stderr, "[Server] Error: %s\n", strerror(errno));
+    #endif
+
+    // Server socket set up
+    memset(&serv_addr, 0, sizeof(serv_addr));
+    memset(sendBuff, 0, sizeof(sendBuff)); 
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    serv_addr.sin_port = htons(PORT); 
+
+    // Attempting to start server
+    if (bind(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0)
+        fprintf(stderr, "[Server] Error: %s\n", strerror(errno));
+
+    if (listen(sockfd, 10) < 0)
+        fprintf(stderr, "[Server] Error: %s\n", strerror(errno));
+
+    // [ ----- Server successfully started and listening for connections ----- ]
+    std::cout << "\nStarting server on port " << PORT << "...\n" << std::endl; 
+    std::cout << "[ ---------- Server Live ---------- ]" << std::endl;
+
+    while (1) {
+        // Terminates server loop and exits if the hotel is completely booked
+        int currRooms = getRoomsLeft(hotelRooms);
+        if (currRooms == 0) {
+            std::cout << "[Server] The hotel is completely booked on reservations\n" << "Please check again with us in a few days\n" << std::endl;
+            break;
+        }
+
+        // Attempt to establish connection from incoming client socket
+        connfd = accept(sockfd, (struct sockaddr*)NULL, NULL); 
+        if (connfd < 0) {
+            fprintf(stderr, "[Server] Error: %s\n", strerror(errno));
+            continue;
+        }
+
+        // [ ----- Retrieves client PID ----- ]
+        pid_t clientPid = -1;
+        int gotPid = read(connfd, &clientPid, sizeof(clientPid));
+        if (gotPid < 0) {
+            fprintf(stderr, "[Server] Error: failed to retrieve pid from client\n%s\n", strerror(errno));
+            continue;
+        }
+
+        std::cout << "[Server] A connection has been established with [Client #" << clientPid << "]" << std::endl;
+        std::cout << "[Server] Current number of rooms availible is " << currRooms << "\n" << std::endl;
+
+        // [ ----- Sending initial hotel size message ----- ]
+        sprintf(sendBuff,"\n[Server] Our hotel currently has %d rooms available.\n"
+        "We have %d floors and %d rooms per floor, for a total of %d suites\n"
+        "What room would you like to reserve?\n", currRooms, FLOORS, F_ROOMS, (FLOORS * F_ROOMS));
+        
+        write(connfd, sendBuff, strlen(sendBuff)); 
+
+        // Closes file descriptor associated with client socket connection
+        close(connfd);
+        sleep(1);
+    }
+
+    std::cout << "[ ---------- Server Offline ---------- ]" << std::endl;
+
+    // [ ----- Deallocations ----- ]
     for (int i =0; i < FLOORS; i++) {
         free(hotelRooms[i]);
     }

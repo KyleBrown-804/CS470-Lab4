@@ -2,11 +2,12 @@
 #define HEADERS_H
 
 #include <sys/socket.h>
+#include <sys/select.h>
+#include <sys/types.h>
 #include <netinet/in.h>
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <unistd.h>
-#include <sys/types.h>
 #include <pthread.h>
 
 #include <iostream>
@@ -14,6 +15,7 @@
 #include <string>
 #include <sstream>
 #include <cstdlib>
+#include <cstring>
 #include <errno.h>
 #include <ctime> 
 #include <cmath>
