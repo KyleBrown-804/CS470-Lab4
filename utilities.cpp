@@ -17,3 +17,12 @@ bool isValidNum(std::string str) {
 
     return true;
 }
+
+void printHotelContents(int** hotel, int f, int r) {
+    for (int i = 0; i < f; i++) {
+        for (int j = 0; j < r; j++) {
+            printf("%d ", hotel[i][j]);
+        }
+        printf("\n");
+    }
+}

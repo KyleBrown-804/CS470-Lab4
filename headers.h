@@ -21,6 +21,9 @@
 #include <ctime> 
 #include <cmath>
 
+#define MAX_BUFF 1024
+
 bool isValidNum(std::string str);
+void printHotelContents(int** hotel, int f, int r);
 
 #endif

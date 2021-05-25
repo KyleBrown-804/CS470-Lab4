@@ -1,5 +1,4 @@
 #include "headers.h"
-#define MAX_BUFF 1024
 
 int PORT;
 int FLOORS = 10;
@@ -26,6 +25,7 @@ bool isValidArgs(int argc, char** args) {
 }
 
 int getRoomsLeft(int** hotel) {
+    printHotelContents(hotel, FLOORS, F_ROOMS);
     int roomsLeft = 0;
     for (int i = 0; i < FLOORS; i++) {
         for (int j = 0; j < F_ROOMS; j++) {
@@ -36,8 +36,57 @@ int getRoomsLeft(int** hotel) {
     return roomsLeft;
 }
 
+// Attempts to reserve a room given the floor and room number or returns false
+bool reservedRoom(int f, int r, int** hotel) {
+
+    // Double checks that floor and rooms numbers are valid
+    if ( (f > 0 && f <= FLOORS) && (r > 0 && r <= F_ROOMS) ) {
+        if (hotel[f-1][r-1] == 0) {
+            hotel[f-1][r-1] = 1;
+            printHotelContents(hotel, FLOORS, F_ROOMS);
+            return true;
+        }
+    }
+    return false;
+}
+
 // Continuously handles booking requests and alerts clients if available or not
-int handleRequests(int connfd) {
+int handleRequests(int connfd, int cPid, int** hotel) {
+    
+    while (1) {
+        int n = 0;
+        char notify[MAX_BUFF];
+        int roomsRes[] = {0, 0};
+
+        // Wait for client request to come in
+        n = read(connfd, roomsRes, sizeof(roomsRes));
+        if (n < 0)
+            fprintf(stderr, "[Server] Error: couldn't recieve client room request\n%s\n", strerror(errno));
+
+        // might need to add 
+        printf("f: %d   r: %d\n", roomsRes[0], roomsRes[1]);
+
+        // Check if room requested is available
+        if (reservedRoom(roomsRes[0], roomsRes[1], hotel)) {
+            printf("[Server] Successfully booked Floor %d, Room %d for [Client #%d]\n", roomsRes[0], roomsRes[1], cPid);
+            sprintf(notify, "[Server] We have successfully booked your stay at Floor %d, Room %d! We look forward to your visit\n", roomsRes[0], roomsRes[1]);
+        }
+        else {
+            printf("[Server] Could not book Floor %d, Room %d for [Client #%d], it's already taken\n", roomsRes[0], roomsRes[1], cPid);
+            sprintf(notify, "[Server] Unfortunately we could not book your request, Floor %d, Room %d is already reserved.\n", roomsRes[0], roomsRes[1]);
+        }
+
+        // Returning the status of the reservation to the client
+        write(connfd, notify, strlen(notify));
+
+        // Updating the client on the number of rooms available for closing connection purposes
+        int rLeft = getRoomsLeft(hotel);
+        write(connfd, &rLeft, sizeof(rLeft));
+        
+        if (rLeft == 0) {
+            break;
+        }
+    }
 
     return 0;
 }
@@ -140,14 +189,14 @@ int main(int argc, char** argv) {
         sprintf(sendBuff,"\n[Server] Our hotel currently has %d rooms available.\n"
         "We have %d floors and %d rooms per floor, for a total of %d suites\n"
         "What room would you like to reserve?\n", currRooms, FLOORS, F_ROOMS, (FLOORS * F_ROOMS));
-        write(connfd, sendBuff, strlen(sendBuff)); 
+        write(connfd, sendBuff, strlen(sendBuff));
 
         // sending dimensions as two ints [floors, rooms]
         int dimensions[] = {FLOORS, F_ROOMS, currRooms};
         write(connfd, dimensions, sizeof(dimensions));
 
         // Handles incoming requests from multiple clients
-        int exitStatus = handleRequests(connfd);
+        int exitStatus = handleRequests(connfd, clientPid, hotelRooms);
 
         // Closes file descriptor associated with client socket connection
         close(connfd);

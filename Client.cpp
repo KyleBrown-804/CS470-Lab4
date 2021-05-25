@@ -62,7 +62,9 @@ void runManualMode(int socketfd, int floors, int rooms, int rLeft, int clientPid
     printf("floors: %d  rooms: %d\n", floors, rooms);
 
     while (rLeft > 0) {
-        int f_choice = 0, r_choice = 0;
+        int f_choice = 0, r_choice = 0, n = 0;
+        char respBuffer[MAX_BUFF];
+        memset(respBuffer, 0, sizeof(respBuffer));
         std::string f;
         std::string r;
 
@@ -100,6 +102,36 @@ void runManualMode(int socketfd, int floors, int rooms, int rLeft, int clientPid
         else {
             printf("\nThis is where a booking request would be sent out\n");
             printf("f_choice: %d  r_choice: %d\n", f_choice, r_choice);
+
+            int post[] = {f_choice, r_choice};
+
+            // Sending desired room reservation to the server
+            if (write(socketfd, post, sizeof(post)) < 0) {
+                fprintf(stderr, "[Client #%d] Error: failed to send reservation request to server\n%s\n", clientPid, strerror(errno));
+            }
+
+            // Recieve response to see if the room was booked or not
+            n = read(socketfd, &respBuffer, sizeof(respBuffer)-1);
+            printf("%s\n", respBuffer);
+
+            if (n < 0)
+                fprintf(stderr, "[Client #%d] Error: %s\n", clientPid, strerror(errno));
+
+            // Awaits server's notification of the number of rooms left to close connections
+            int spacesLeft = -1;
+            n = read(socketfd, &spacesLeft, sizeof(spacesLeft));
+            if (n < 0)
+                fprintf(stderr, "[Client #%d] Error: %s\n", clientPid, strerror(errno));
+
+            // Checks to makes sure that spaces left was sent successfully
+            if (spacesLeft > -1) {
+                rLeft = spacesLeft;
+                printf("[Client #%d] There are currently %d rooms left available\n", clientPid, rLeft);
+            }
+            else {
+                printf("[Client #%d] There was an error trying to recieve the spaces left\n", clientPid);
+            }
+
         }
     }
 
@@ -161,9 +193,18 @@ int main(int argc, char** argv) {
         fprintf(stderr, "[Client #%d] Error: failed to send pid to server\n%s\n", clientPid, strerror(errno));
     }
 
+    // [HERE] an error is probably occuring because of the inconsistency with double
+    // writing from server and double reading in client
+
     // Reads in intial hotel message stating dimensions and rooms availible
+    // while ((n = read(sockfd, recvBuff, sizeof(recvBuff)-1)) > 0) {
+    //     printf("%s", recvBuff);
+    //     memset(recvBuff, 0, sizeof(recvBuff));
+    // }
+
     n = read(sockfd, recvBuff, sizeof(recvBuff)-1);
-    printf("%s", recvBuff);
+    printf("%s\n", recvBuff);
+
     if (n < 0) {
         printf("\n[Client #%d] Error reading in initial hotel message\n", clientPid);
         return 1;
@@ -172,7 +213,7 @@ int main(int argc, char** argv) {
     // Reads in dimensions and rooms available for client side error checking
     int dimens[] = {0, 0, 0};
     n = 0;
-    n = read(sockfd, &dimens, sizeof(dimens));
+    n = read(sockfd, dimens, sizeof(dimens));
     if (n < 0) {
         printf("\n[Client #%d] Error reading in dimensions from hotel\n", clientPid);
         return 1;
