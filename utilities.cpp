@@ -19,10 +19,15 @@ bool isValidNum(std::string str) {
 }
 
 void printHotelContents(int** hotel, int f, int r) {
+    
+    printf("\n[ --- Hotel Occupancy ---]\n");
+
     for (int i = 0; i < f; i++) {
         for (int j = 0; j < r; j++) {
             printf("%d ", hotel[i][j]);
         }
         printf("\n");
     }
+
+    printf("[ -----------------------]\n");
 }

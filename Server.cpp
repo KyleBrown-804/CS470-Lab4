@@ -59,6 +59,10 @@ int handleRequests(int connfd, int cPid, int** hotel) {
 
         // Wait for client request to come in
         n = read(connfd, roomsRes, sizeof(roomsRes));
+        if (n == 0) {
+            printf("\n[Server] Connection to [Client #%d] was lost...\n", cPid);
+            return 1;
+        }
         if (n < 0)
             fprintf(stderr, "[Server] Error: couldn't recieve client room request\n%s\n", strerror(errno));
 
@@ -82,8 +86,12 @@ int handleRequests(int connfd, int cPid, int** hotel) {
         // Getting ACK of the status message sent
         int ACK = 0;
         n = read(connfd, &ACK, sizeof(ACK));
+        if (n == 0) {
+            printf("\n[Server] Connection to [Client #%d] was lost...\n", cPid);
+            return 1;
+        }
         if (n < 0)
-            fprintf(stderr, "[Server] Error: couldn't recieve the client ACK of welcome message\n%s\n", strerror(errno));
+            fprintf(stderr, "[Server] Error: couldn't recieve the client ACK of the reservation status message\n%s\n", strerror(errno));
         
         if (ACK != 1)
             printf("[Server] Error: failed to recieve an ACK for the reservation status message\n");
@@ -175,7 +183,7 @@ int main(int argc, char** argv) {
         if (currRooms == 0) {
             std::cout << "\n[Server] The hotel is completely booked on reservations\n" << 
             "Please check again with us in a few days\n" << std::endl;
-            break;
+            //break;
         }
 
         // Attempt to establish connection from incoming client socket
@@ -188,6 +196,10 @@ int main(int argc, char** argv) {
         // [ ----- Retrieves client PID ----- ]
         pid_t clientPid = -1;
         int gotPid = read(connfd, &clientPid, sizeof(clientPid));
+        if (gotPid == 0) {
+            printf("\n[Server] Connection to the client was lost...\n");
+            continue;
+        }
         if (gotPid < 0) {
             fprintf(stderr, "[Server] Error: failed to retrieve pid from client\n%s\n", strerror(errno));
             continue;
@@ -205,6 +217,10 @@ int main(int argc, char** argv) {
         // Getting ACK of initial hotel message sending
         int ACK = 0;
         int n = read(connfd, &ACK, sizeof(ACK));
+        if (n == 0) {
+            printf("\n[Server] Connection to [Client #%d] was lost...\n", clientPid);
+            continue;
+        }
         if (n < 0)
             fprintf(stderr, "[Server] Error: couldn't recieve the client ACK of welcome message\n%s\n", strerror(errno));
         
@@ -221,7 +237,15 @@ int main(int argc, char** argv) {
         int exitStatus = handleRequests(connfd, clientPid, hotelRooms);
 
         // Closes file descriptor associated with client socket connection
-        close(connfd);
+        if (exitStatus == 0) {
+            close(connfd); 
+        }
+        else {
+            printf("[Server] Closing file descriptor for lost [Client #%d]\n", clientPid);
+            if (close(connfd) < 0) {
+                fprintf(stderr, "\n[Server] Error: failed to close file descriptor for client socket connection\n%s\n", strerror(errno));
+            }
+        }
         sleep(1);
     }
 
