@@ -59,12 +59,11 @@ void runAutomaticMode(int socketfd, int floors, int rooms, int rLeft, int client
 }
 
 void runManualMode(int socketfd, int floors, int rooms, int rLeft, int clientPid) {
-    printf("floors: %d  rooms: %d\n", floors, rooms);
 
     while (rLeft > 0) {
         int f_choice = 0, r_choice = 0, n = 0;
-        char respBuffer[MAX_BUFF];
-        memset(respBuffer, 0, sizeof(respBuffer));
+        char statusBuff[MAX_BUFF];
+        memset(statusBuff, 0, sizeof(statusBuff));
         std::string f;
         std::string r;
 
@@ -100,59 +99,46 @@ void runManualMode(int socketfd, int floors, int rooms, int rLeft, int clientPid
 
         // Sends the desired room to the server to check if it is available for booking
         else {
-            printf("f_choice: %d  r_choice: %d\n", f_choice, r_choice);
-
+            printf("\n[Client #%d] sending reservation for Floor %d, Room %d to the server\n", clientPid, f_choice, r_choice);
             int post[] = {f_choice, r_choice};
 
             // Sending desired room reservation to the server
             if (write(socketfd, post, sizeof(post)) < 0) {
-                fprintf(stderr, "[Client #%d] Error: failed to send reservation request to server\n%s\n", clientPid, strerror(errno));
+                fprintf(stderr, "\n[Client #%d] Error: failed to send reservation request to server\n%s\n", clientPid, strerror(errno));
             }
 
             // Recieve response to see if the room was booked or not
-            // while ( (n = read(socketfd, &respBuffer, sizeof(respBuffer)-1)) > 0) {
-            //     printf("%s", respBuffer);
-            //     if (respBuffer[n-1] == '@') // this almost always works but not always
-            //         break;
+            // [ ******************************* ]
+            n = read(socketfd, statusBuff, sizeof(statusBuff)-1);
+            statusBuff[n-1] = 0;
+            printf("%s\n", statusBuff);
+            if (n < 0)
+                printf("\n[Client #%d] Error: failed reading in the hotel reservation status message\n", clientPid);
 
-            //     // change to respBuffer
-            //     memset(respBuffer, 0, sizeof(respBuffer));
-            // }
+            int ACK = 1;
+            if (write(socketfd, &ACK, sizeof(ACK)) < 0)
+                fprintf(stderr, "\n[Client #%d] Error: failed to send ACK for reservation status message to the server\n%s\n", clientPid, strerror(errno));
 
-            // if (n < 0)
-            //     fprintf(stderr, "[Client #%d] Error: %s\n", clientPid, strerror(errno));
+            // [ ******************************* ]
 
             // Awaits server's notification of the number of rooms left to close connections
-            int bookingResp[] = {-1, -1};
-            n = read(socketfd, bookingResp, sizeof(bookingResp));
+            int bookingResp = -1;
+            n = read(socketfd, &bookingResp, sizeof(bookingResp));
             if (n < 0)
-                fprintf(stderr, "[Client #%d] Error: %s\n", clientPid, strerror(errno));
+                fprintf(stderr, "\n[Client #%d] Error: %s\n", clientPid, strerror(errno));
 
-
-            // Checks to makes sure that spaces left was sent successfully
-            if (bookingResp[1] > -1) {
-                rLeft = bookingResp[1];
-                printf("[Client #%d] There are currently %d rooms left available\n", clientPid, rLeft);
-
-                // Successful booking
-                if (bookingResp[0] == 1) {
-                    printf("Room was booked!\n");
-                }
-                else if (bookingResp[0] == 0) {
-                    printf("Room was not booked...\n");
-                }
-                else {
-                    printf("This shouldn't print\n");
-                }
+            // Checks to makes sure that spaces left was recieved successfully
+            if (bookingResp > -1) {
+                rLeft = bookingResp;
+                printf("\n[Client #%d] There are currently %d rooms left available\n", clientPid, rLeft);
             }
-            else {
+            else
                 printf("[Client #%d] There was an error trying to recieve the spaces left\n", clientPid);
-            }
 
         }
     }
 
-    printf("[Client] There are no more rooms available the connection will now close\n");
+    printf("\n[Client] There are no more rooms available the connection will now close\n");
 }
 
 int main(int argc, char** argv) {
@@ -211,23 +197,20 @@ int main(int argc, char** argv) {
     }
 
     // Reads in intial hotel message stating dimensions and rooms availible
-    // while ((n = read(sockfd, recvBuff, sizeof(recvBuff)-1)) > 0) {
-    //     printf("%s", recvBuff);
-    //     if (recvBuff[n-1] == '@') // this almost always works but not always
-    //         break;
-        
-    //     memset(recvBuff, 0, sizeof(recvBuff));
-    // }
+    // [ ******************************* 
+    n = read(sockfd, recvBuff, sizeof(recvBuff)-1);
+    recvBuff[n-1] = 0;
+    printf("%s\n", recvBuff);
+    if (n < 0) {
+        printf("\n[Client #%d] Error: failed while reading in initial hotel message\n", clientPid);
+        return 1;
+    }
 
-    // n = read(sockfd, recvBuff, sizeof(recvBuff)-1);
-    // printf("%s\n", recvBuff);
-
-    // if (n < 0) {
-    //     printf("\n[Client #%d] Error reading in initial hotel message\n", clientPid);
-    //     return 1;
-    // }
-
-    printf("Here\n");
+    int ACK = 1;
+    if (write(sockfd, &ACK, sizeof(ACK)) < 0)
+        fprintf(stderr, "[Client #%d] Error: failed to send ACK for welcome message to server\n%s\n", clientPid, strerror(errno));
+    
+    // ******************************* ]
 
     // Reads in dimensions and rooms available for client side error checking
     int dimens[] = {0, 0, 0};
@@ -243,8 +226,6 @@ int main(int argc, char** argv) {
         printf("\n[Client #%d] Error reading in dimensions from hotel\n", clientPid);
         return 1;
     }
-
-    printf("floors: %d   rooms: %d   allRooms: %d\n", dimens[0], dimens[1], dimens[2]);
 
     // [ ----- Manual / Automatic running modes ----- ]
     if (MODE == 'm')
