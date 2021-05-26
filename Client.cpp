@@ -51,17 +51,66 @@ bool isValidSpace(int x, int max) {
 
 void runAutomaticMode(int socketfd, int floors, int rooms, int rLeft, int clientPid) {
 
-    // Keeps running until all rooms are reserved
-    while (1) {
-        
+    // Setting the random seed once for efficiency
+    srand(time(NULL));
 
+    // Keeps running until all rooms are reserved
+    while (rLeft > 0) {
+        int fChoice = 0, rChoice = 0, n = 0;
+        char statusBuff[MAX_BUFF];
+        memset(statusBuff, 0, sizeof(statusBuff));
+
+        // Creates random floor and room combinations to request
+        fChoice = (rand() % floors) + 1;
+        rChoice = (rand() % rooms) + 1;
+        int post[] = {fChoice, rChoice};
+
+        // Sending desired room reservation to the server
+        if (write(socketfd, post, sizeof(post)) < 0)
+            fprintf(stderr, "\n[Client #%d] Error: failed to send reservation request to server\n%s\n", clientPid, strerror(errno));
+        
+        // Recieve response to see if the room was booked or not
+        // [ ******************************* ]
+        n = read(socketfd, statusBuff, sizeof(statusBuff)-1);
+        statusBuff[n-1] = 0;
+        printf("%s\n", statusBuff);
+        if (n < 0)
+            printf("\n[Client #%d] Error: failed reading in the hotel reservation status message\n", clientPid);
+
+        int ACK = 1;
+        if (write(socketfd, &ACK, sizeof(ACK)) < 0)
+            fprintf(stderr, "\n[Client #%d] Error: failed to send ACK for reservation status message to the server\n%s\n", clientPid, strerror(errno));
+
+        // [ ******************************* ]
+
+        // Awaits server's notification of the number of rooms left to close connections
+        int bookingResp = -1;
+        n = read(socketfd, &bookingResp, sizeof(bookingResp));
+        if (n < 0)
+            fprintf(stderr, "\n[Client #%d] Error: %s\n", clientPid, strerror(errno));
+
+        // Checks to makes sure that spaces left was recieved successfully
+        if (bookingResp > -1) {
+            rLeft = bookingResp;
+            printf("\n[Client #%d] There are currently %d rooms left available\n", clientPid, rLeft);
+        }
+        else
+            printf("\n[Client #%d] There was an error trying to recieve the spaces left\n", clientPid);
+
+        // Sleeps the automatic mode client for 1-5 seconds chosen randomly
+        int sleepTime = (rand() % 5) + 1;
+        printf("\n[Client #%d] (Automatic Mode): Now sleeping for %d seconds...\n", clientPid, sleepTime);
+        printf("-------------------------------------------------------------------\n");
+        sleep(sleepTime);
     }
+
+    printf("\n[Client] There are no more rooms available the connection will now close\n");
 }
 
 void runManualMode(int socketfd, int floors, int rooms, int rLeft, int clientPid) {
 
     while (rLeft > 0) {
-        int f_choice = 0, r_choice = 0, n = 0;
+        int fChoice = 0, rChoice = 0, n = 0;
         char statusBuff[MAX_BUFF];
         memset(statusBuff, 0, sizeof(statusBuff));
         std::string f;
@@ -76,8 +125,8 @@ void runManualMode(int socketfd, int floors, int rooms, int rLeft, int clientPid
             std::getline(std::cin, f);
         }
 
-        f_choice = std::stoi(std::string(f));
-        if (! isValidSpace(f_choice, floors)) {
+        fChoice = std::stoi(std::string(f));
+        if (! isValidSpace(fChoice, floors)) {
             printf("Invalid floor entered, try again\n");
             continue;
         }
@@ -91,16 +140,16 @@ void runManualMode(int socketfd, int floors, int rooms, int rLeft, int clientPid
             std::getline(std::cin, r);
         }
 
-        r_choice = std::stoi(std::string(r));
-        if (! isValidSpace(r_choice, rooms)) {
+        rChoice = std::stoi(std::string(r));
+        if (! isValidSpace(rChoice, rooms)) {
             printf("Invalid room number entered, try again\n");
             continue;
         }
 
         // Sends the desired room to the server to check if it is available for booking
         else {
-            printf("\n[Client #%d] sending reservation for Floor %d, Room %d to the server\n", clientPid, f_choice, r_choice);
-            int post[] = {f_choice, r_choice};
+            printf("\n[Client #%d] sending reservation for Floor %d, Room %d to the server\n", clientPid, fChoice, rChoice);
+            int post[] = {fChoice, rChoice};
 
             // Sending desired room reservation to the server
             if (write(socketfd, post, sizeof(post)) < 0) {
@@ -133,9 +182,10 @@ void runManualMode(int socketfd, int floors, int rooms, int rLeft, int clientPid
                 printf("\n[Client #%d] There are currently %d rooms left available\n", clientPid, rLeft);
             }
             else
-                printf("[Client #%d] There was an error trying to recieve the spaces left\n", clientPid);
+                printf("\n[Client #%d] There was an error trying to recieve the spaces left\n", clientPid);
 
         }
+        printf("-------------------------------------------------------------------\n");
     }
 
     printf("\n[Client] There are no more rooms available the connection will now close\n");
