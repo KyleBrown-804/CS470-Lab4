@@ -26,11 +26,11 @@ bool isValidArgs(int argc, char** args) {
 
 int getRoomsLeft(int** hotel) {
     printHotelContents(hotel, FLOORS, F_ROOMS);
-    int roomsLeft = 0;
+    int roomsLeft = 8;
     for (int i = 0; i < FLOORS; i++) {
         for (int j = 0; j < F_ROOMS; j++) {
-            if (hotel[i][j] == 0)
-                ++roomsLeft;
+            if (hotel[i][j] != 0)
+                roomsLeft--;
         }
     }
     return roomsLeft;
@@ -43,7 +43,6 @@ bool reservedRoom(int f, int r, int** hotel) {
     if ( (f > 0 && f <= FLOORS) && (r > 0 && r <= F_ROOMS) ) {
         if (hotel[f-1][r-1] == 0) {
             hotel[f-1][r-1] = 1;
-            printHotelContents(hotel, FLOORS, F_ROOMS);
             return true;
         }
     }
@@ -63,25 +62,31 @@ int handleRequests(int connfd, int cPid, int** hotel) {
         if (n < 0)
             fprintf(stderr, "[Server] Error: couldn't recieve client room request\n%s\n", strerror(errno));
 
-        // might need to add 
+        // might need to add
         printf("f: %d   r: %d\n", roomsRes[0], roomsRes[1]);
 
         // Check if room requested is available
-        if (reservedRoom(roomsRes[0], roomsRes[1], hotel)) {
-            printf("[Server] Successfully booked Floor %d, Room %d for [Client #%d]\n", roomsRes[0], roomsRes[1], cPid);
-            sprintf(notify, "[Server] We have successfully booked your stay at Floor %d, Room %d! We look forward to your visit\n", roomsRes[0], roomsRes[1]);
-        }
-        else {
-            printf("[Server] Could not book Floor %d, Room %d for [Client #%d], it's already taken\n", roomsRes[0], roomsRes[1], cPid);
-            sprintf(notify, "[Server] Unfortunately we could not book your request, Floor %d, Room %d is already reserved.\n", roomsRes[0], roomsRes[1]);
-        }
+        // if (reservedRoom(roomsRes[0], roomsRes[1], hotel)) {
+        //     printf("[Server] Successfully booked Floor %d, Room %d for [Client #%d]\n", roomsRes[0], roomsRes[1], cPid);
+        //     sprintf(notify, "[Server] We have successfully booked your stay at Floor %d, Room %d! We look forward to your visit\n@", roomsRes[0], roomsRes[1]);
+        // }
+        // else {
+        //     printf("[Server] Could not book Floor %d, Room %d for [Client #%d], it's already taken\n", roomsRes[0], roomsRes[1], cPid);
+        //     sprintf(notify, "[Server] Unfortunately we could not book your request, Floor %d, Room %d is already reserved.\n@", roomsRes[0], roomsRes[1]);
+        // }
 
         // Returning the status of the reservation to the client
-        write(connfd, notify, strlen(notify));
+        // write(connfd, notify, strlen(notify));
+
+        int success = 0;
+        if (reservedRoom(roomsRes[0], roomsRes[1], hotel)) {
+            success = 1;
+        }
 
         // Updating the client on the number of rooms available for closing connection purposes
         int rLeft = getRoomsLeft(hotel);
-        write(connfd, &rLeft, sizeof(rLeft));
+        int result[] = {success, rLeft};
+        write(connfd, result, sizeof(result));
         
         if (rLeft == 0) {
             break;
@@ -186,10 +191,10 @@ int main(int argc, char** argv) {
         std::cout << "[Server] Current number of rooms availible is " << currRooms << "\n" << std::endl;
 
         // [ ----- Sending initial hotel size message ----- ]
-        sprintf(sendBuff,"\n[Server] Our hotel currently has %d rooms available.\n"
-        "We have %d floors and %d rooms per floor, for a total of %d suites\n"
-        "What room would you like to reserve?\n", currRooms, FLOORS, F_ROOMS, (FLOORS * F_ROOMS));
-        write(connfd, sendBuff, strlen(sendBuff));
+        // sprintf(sendBuff,"\n[Server] Our hotel currently has %d rooms available.\n"
+        // "We have %d floors and %d rooms per floor, for a total of %d suites\n"
+        // "What room would you like to reserve?\n@", currRooms, FLOORS, F_ROOMS, (FLOORS * F_ROOMS));
+        // write(connfd, sendBuff, strlen(sendBuff));
 
         // sending dimensions as two ints [floors, rooms]
         int dimensions[] = {FLOORS, F_ROOMS, currRooms};
