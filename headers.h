@@ -9,6 +9,7 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <atomic>
 
 #include <iostream>
 #include <cstdio>

@@ -8,6 +8,7 @@ std::string USAGE = "Usage: <Executable> <Port> [<Floors> <Rooms per Floor>]\n"
                     "Note: arguments in []'s are optional but if included must specify both\n";
 
 int** hotelRooms;
+std::atomic<int> hotelFull; // Use for master thread to signal workers
 pthread_mutex_t hotelLock;
 
 // Checks if valid numbers were entered and assigns arguments to global variables
@@ -165,6 +166,8 @@ void* handleRequests(void* client_socket) {
         }
     }
 
+    // Exited normally close connection
+    // close(connfd);
     return NULL;
 }
 
@@ -254,9 +257,10 @@ int main(int argc, char** argv) {
         // Handles incoming requests from multiple clients
         // handleRequests(connfd);
         pthread_t t;
-        int *pclient = (int*) malloc(sizeof(int));
+        // int *pclient = (int*) malloc(sizeof(int));
 
-        pthread_create(&t, NULL, handleRequests, &connfd);
+        int exitStat = pthread_create(&t, NULL, handleRequests, &connfd);
+        printf("Here\n");
         sleep(1);
     }
 
