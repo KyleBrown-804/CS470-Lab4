@@ -17,7 +17,7 @@
 #include <sstream>
 #include <cstdlib>
 #include <cstring>
-#include <deque>
+#include <queue>
 #include <stdexcept>
 #include <errno.h>
 #include <ctime> 

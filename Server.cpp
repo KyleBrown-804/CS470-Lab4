@@ -1,5 +1,4 @@
 #include "headers.h"
-#include "queueList.h"
 #define THREAD_POOL 20
 
 int PORT;
@@ -12,7 +11,9 @@ std::string USAGE = "Usage: <Executable> <Port> [<Floors> <Rooms per Floor>]\n"
 int** hotelRooms;
 std::atomic<int> hotelFull; // Use for master thread to signal workers
 pthread_mutex_t hotelLock;
+pthread_mutex_t queueLock;
 pthread_t workerThreads[THREAD_POOL];
+std::queue<int> pool;
 
 // Pool of file descriptor tasks
 
@@ -61,10 +62,6 @@ bool reservedRoom(int f, int r) {
 
 // Continuously handles booking requests and alerts clients if available or not
 void handleRequests(int connfd) {
-    // int connfd = *((int*)client_socket);
-
-    printf("connfd: %d\n", connfd);
-
     char sendBuff[MAX_BUFF];
     memset(sendBuff, 0, sizeof(sendBuff)); 
 
@@ -130,9 +127,12 @@ void handleRequests(int connfd) {
 
         // [ ----- Trys to reserve reservation for client room and sends a status message ----- ]
         int success = 0;
-        if (reservedRoom(roomsRes[0], roomsRes[1]))
+        pthread_mutex_lock(&hotelLock);
+        if (reservedRoom(roomsRes[0], roomsRes[1])) {
             success = 1;
-        
+        }
+        pthread_mutex_unlock(&hotelLock);
+
         if (success == 1) {
             printf("\n[Server] Successfully booked Floor %d, Room %d for [Client #%d]\n", roomsRes[0], roomsRes[1], clientPid);
             sprintf(notify, "\n[Server] We have successfully booked your stay at Floor %d, Room %d! We look forward to your visit\n", roomsRes[0], roomsRes[1]);
@@ -177,13 +177,28 @@ void handleRequests(int connfd) {
 void * workerThreadFunc(void *arg) {
 
     while (true) {
-        //int p_connfd = pool.front();
-        //if (p_connfd != NULL) {
+        int p_connfd = -1;
+        if (hotelFull == 1)
+            break;
 
-            // Handle job
-            //handleRequests(p_connfd);
-        //}
+        // Mutex locking so no two threads dequeue at the same time
+        pthread_mutex_lock(&queueLock);
+            if (! pool.empty()) {
+                p_connfd = pool.front();
+                pool.pop();
+            }
+        pthread_mutex_unlock(&queueLock);
+
+        // If a job could be pulled from the queue then the thread will handle it
+        if (p_connfd != -1) {
+            handleRequests(p_connfd);
+            if (close(p_connfd) < 0) {
+                fprintf(stderr, "\n[Server] Error: failed to close file descriptor for client socket connection\n%s\n", strerror(errno));
+            }
+        }
     }
+
+    return NULL;
 }
 
 int main(int argc, char** argv) {
@@ -262,6 +277,7 @@ int main(int argc, char** argv) {
         if (currRooms == 0) {
             std::cout << "\n[Server] The hotel is completely booked on reservations\n" << 
             "Please check again with us in a few days\n" << std::endl;
+            hotelFull = 1;
             break;
         }
 
@@ -272,22 +288,23 @@ int main(int argc, char** argv) {
             continue;
         }
 
-        printf("connfd: %d\n", newfd);
+        // Adds new socket client fd to the work queue for threads to grab
+        // Mutex locking so no two threads enqueue at the same time
+        pthread_mutex_lock(&queueLock);
+        pool.push(newfd);
+        pthread_mutex_unlock(&queueLock);
 
-        // Handles incoming requests from multiple clients
-        //pthread_t t;
-        //pool.push_back(newfd);
-
-        //int exitStat = pthread_create(&t, NULL, handleRequests, &connfd);
-        sleep(1);
     }
 
-    //pthread_join(t, NULL);
 
     // Closes file descriptor associated with client socket connection
-    if (close(newfd) < 0) {
-        fprintf(stderr, "\n[Server] Error: failed to close file descriptor for client socket connection\n%s\n", strerror(errno));
-    }
+    // if (close(newfd) < 0) {
+    //     fprintf(stderr, "\n[Server] Error: failed to close file descriptor for client socket connection\n%s\n", strerror(errno));
+    // }
+
+    // Waits for pthreads to finish
+    for (int i = 0; i < THREAD_POOL; i++)
+        pthread_join(workerThreads[i], NULL);
 
     std::cout << "[ ---------- Server Offline ---------- ]" << std::endl;
 
