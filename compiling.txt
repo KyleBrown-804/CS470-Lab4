@@ -1,5 +1,8 @@
 [Server]
     g++ -o hotel utilities.cpp Server.cpp -pthread
+    
+    // new
+    g++ -o queueList.cpp utilities.cpp Server.cpp -pthread
 
 [Client]
     g++ -o agency utilities.cpp Client.cpp -pthread

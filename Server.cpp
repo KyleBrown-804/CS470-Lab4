@@ -1,4 +1,6 @@
 #include "headers.h"
+#include "queueList.h"
+#define THREAD_POOL 20
 
 int PORT;
 int FLOORS = 10;
@@ -10,6 +12,9 @@ std::string USAGE = "Usage: <Executable> <Port> [<Floors> <Rooms per Floor>]\n"
 int** hotelRooms;
 std::atomic<int> hotelFull; // Use for master thread to signal workers
 pthread_mutex_t hotelLock;
+pthread_t workerThreads[THREAD_POOL];
+
+// Pool of file descriptor tasks
 
 // Checks if valid numbers were entered and assigns arguments to global variables
 bool isValidArgs(int argc, char** args) {
@@ -55,8 +60,8 @@ bool reservedRoom(int f, int r) {
 }
 
 // Continuously handles booking requests and alerts clients if available or not
-void* handleRequests(void* client_socket) {
-    int connfd = *((int*)client_socket);
+void handleRequests(int connfd) {
+    // int connfd = *((int*)client_socket);
 
     printf("connfd: %d\n", connfd);
 
@@ -68,11 +73,11 @@ void* handleRequests(void* client_socket) {
     int gotPid = read(connfd, &clientPid, sizeof(clientPid));
     if (gotPid == 0) {
         printf("\n[Server] Connection to the client was lost...\n");
-        return NULL;
+        return;
     }
     if (gotPid < 0) {
         fprintf(stderr, "[Server] Error: failed to retrieve pid from client\n%d\n", errno);
-        return NULL;
+        return;
     }
 
     std::cout << "[Server] A connection has been established with [Client #" << clientPid << "]" << std::endl;
@@ -89,15 +94,15 @@ void* handleRequests(void* client_socket) {
     int n = read(connfd, &ACK, sizeof(ACK));
     if (n == 0) {
         printf("\n[Server] Connection to [Client #%d] was lost...\n", clientPid);
-        return NULL;
+        return;
     }
     if (n < 0) {
         fprintf(stderr, "[Server] Error: couldn't recieve the client ACK of welcome message\n%s\n", strerror(errno));
-        return NULL;
+        return;
     }
     if (ACK != 1) {
         printf("[Server] Error: failed to recieve an ACK for the welcome message\n");
-        return NULL;
+        return;
     }
     // [ ******************************* ]
 
@@ -114,11 +119,11 @@ void* handleRequests(void* client_socket) {
         n = read(connfd, roomsRes, sizeof(roomsRes));
         if (n == 0) {
             printf("\n[Server] Connection to [Client #%d] was lost...\n", clientPid);
-            return NULL;
+            return;
         }
         if (n < 0) {
             fprintf(stderr, "[Server] Error: couldn't recieve client room request\n%s\n", strerror(errno));
-            return NULL;
+            return;
         }
 
         printf("\n[Client #%d] would like to request Floor %d, Room %d\n", clientPid, roomsRes[0], roomsRes[1]);
@@ -143,16 +148,16 @@ void* handleRequests(void* client_socket) {
         n = read(connfd, &ACK, sizeof(ACK));
         if (n == 0) {
             printf("\n[Server] Connection to [Client #%d] was lost...\n", clientPid);
-            return NULL;
+            return;
         }
         if (n < 0) {
             fprintf(stderr, "[Server] Error: couldn't recieve the client ACK of the reservation status message\n%s\n", strerror(errno));
-            return NULL;
+            return;
         }
         
         if (ACK != 1) {
             printf("[Server] Error: failed to recieve an ACK for the reservation status message\n");
-            return NULL;
+            return;
         }
         
         // [ ---------------------------------------------------------------------------------- ]
@@ -166,9 +171,19 @@ void* handleRequests(void* client_socket) {
         }
     }
 
-    // Exited normally close connection
-    // close(connfd);
-    return NULL;
+    return;
+}
+
+void * workerThreadFunc(void *arg) {
+
+    while (true) {
+        //int p_connfd = pool.front();
+        //if (p_connfd != NULL) {
+
+            // Handle job
+            //handleRequests(p_connfd);
+        //}
+    }
 }
 
 int main(int argc, char** argv) {
@@ -198,7 +213,7 @@ int main(int argc, char** argv) {
     }
 
     // [ ----- Starting server connection ----- ]
-    int sockfd = 0, connfd = 0;
+    int sockfd = 0, newfd = 0;
     struct sockaddr_in serv_addr;
 
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -236,6 +251,11 @@ int main(int argc, char** argv) {
     std::cout << "\nStarting server on port " << PORT << "...\n" << std::endl; 
     std::cout << "[ ---------- Server Live ---------- ]" << std::endl;
 
+    // Starting the thread pool to await incoming work
+    for (int i = 0; i < THREAD_POOL; i++) {
+        pthread_create(&workerThreads[i], NULL, workerThreadFunc, NULL);
+    }
+
     while (1) {
         // Terminates server loop and exits if the hotel is completely booked
         currRooms = getRoomsLeft();
@@ -246,28 +266,26 @@ int main(int argc, char** argv) {
         }
 
         // Attempt to establish connection from incoming client socket
-        connfd = accept(sockfd, (struct sockaddr*)NULL, NULL); 
-        if (connfd < 0) {
+        newfd = accept(sockfd, (struct sockaddr*)NULL, NULL); 
+        if (newfd < 0) {
             fprintf(stderr, "[Server] Error: %s\n", strerror(errno));
             continue;
         }
 
-        printf("connfd: %d\n", connfd);
+        printf("connfd: %d\n", newfd);
 
         // Handles incoming requests from multiple clients
-        // handleRequests(connfd);
-        pthread_t t;
-        // int *pclient = (int*) malloc(sizeof(int));
+        //pthread_t t;
+        //pool.push_back(newfd);
 
-        int exitStat = pthread_create(&t, NULL, handleRequests, &connfd);
-        printf("Here\n");
+        //int exitStat = pthread_create(&t, NULL, handleRequests, &connfd);
         sleep(1);
     }
 
     //pthread_join(t, NULL);
 
     // Closes file descriptor associated with client socket connection
-    if (close(connfd) < 0) {
+    if (close(newfd) < 0) {
         fprintf(stderr, "\n[Server] Error: failed to close file descriptor for client socket connection\n%s\n", strerror(errno));
     }
 
