@@ -1,3 +1,9 @@
+/* 
+* Kyle Brown
+* 5/27/2021
+* CS470 Operating Systems Lab 4
+*/
+
 #include "headers.h"
 
 bool isValidNum(std::string str) {
@@ -22,7 +28,7 @@ void printHotelContents(int** hotel, int f, int r) {
     
     printf("\n[ --- Hotel Occupancy ---]\n");
 
-    for (int i = 0; i < f; i++) {
+    for (int i = f-1; i >= 0; i--) {
         for (int j = 0; j < r; j++) {
             printf("%d ", hotel[i][j]);
         }

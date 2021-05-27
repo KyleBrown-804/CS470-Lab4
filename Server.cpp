@@ -1,5 +1,15 @@
+/* 
+* Kyle Brown
+* 5/27/2021
+* CS470 Operating Systems Lab 4
+*
+* [Compiling]:
+*   run the following command 'g++ -o hotel utilities.cpp Server.cpp -pthread'
+*   from there the program may be ran such as ./hotel 16000 5 5
+*/
+
 #include "headers.h"
-#define THREAD_POOL 20
+#define THREAD_POOL 20 // Change to max number of parallel clients desired
 
 int PORT;
 int FLOORS = 10;
@@ -9,13 +19,14 @@ std::string USAGE = "Usage: <Executable> <Port> [<Floors> <Rooms per Floor>]\n"
                     "Note: arguments in []'s are optional but if included must specify both\n";
 
 int** hotelRooms;
-std::atomic<int> hotelFull; // Use for master thread to signal workers
+
+// Thread pool related variables
+std::atomic<int> hotelFull;
 pthread_mutex_t hotelLock;
 pthread_mutex_t queueLock;
 pthread_t workerThreads[THREAD_POOL];
+pthread_cond_t waitCondition = PTHREAD_COND_INITIALIZER;
 std::queue<int> pool;
-
-// Pool of file descriptor tasks
 
 // Checks if valid numbers were entered and assigns arguments to global variables
 bool isValidArgs(int argc, char** args) {
@@ -174,6 +185,7 @@ void handleRequests(int connfd) {
     return;
 }
 
+// Worker thread function to pull "work" (client sockets) from a job queue
 void * workerThreadFunc(void *arg) {
 
     while (true) {
@@ -182,8 +194,18 @@ void * workerThreadFunc(void *arg) {
             break;
 
         // Mutex locking so no two threads dequeue at the same time
+        // Conditional wait lets threads sleep until a new job enters the queue
+        // to not take up a ton of CPU cycles checking if there is new work
         pthread_mutex_lock(&queueLock);
-            if (! pool.empty()) {
+
+            // If there is not work in the queue then threads will wait
+            if (pool.empty()) {
+                pthread_cond_wait(&waitCondition, &queueLock);
+                p_connfd = pool.front();
+                pool.pop();
+            }
+            // Otherwise they pull from the queue and start working
+            else {
                 p_connfd = pool.front();
                 pool.pop();
             }
@@ -229,6 +251,7 @@ int main(int argc, char** argv) {
 
     // [ ----- Starting server connection ----- ]
     int sockfd = 0, newfd = 0;
+    hotelFull = 0;
     struct sockaddr_in serv_addr;
 
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -290,17 +313,13 @@ int main(int argc, char** argv) {
 
         // Adds new socket client fd to the work queue for threads to grab
         // Mutex locking so no two threads enqueue at the same time
+        // Signal condition notifies threads which are sleeping that there is new work
         pthread_mutex_lock(&queueLock);
         pool.push(newfd);
+        pthread_cond_signal(&waitCondition);
         pthread_mutex_unlock(&queueLock);
 
     }
-
-
-    // Closes file descriptor associated with client socket connection
-    // if (close(newfd) < 0) {
-    //     fprintf(stderr, "\n[Server] Error: failed to close file descriptor for client socket connection\n%s\n", strerror(errno));
-    // }
 
     // Waits for pthreads to finish
     for (int i = 0; i < THREAD_POOL; i++)

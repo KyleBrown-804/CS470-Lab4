@@ -1,5 +1,10 @@
 [Server]
     g++ -o hotel utilities.cpp Server.cpp -pthread
+
+    ./hotel 16000 5 5
     
 [Client]
     g++ -o agency utilities.cpp Client.cpp -pthread
+
+    ./agency 127.0.0.1 16000 manual
+    ./agency 127.0.0.1 16000 automatic

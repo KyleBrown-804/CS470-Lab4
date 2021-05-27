@@ -1,3 +1,16 @@
+/* 
+* Kyle Brown
+* 5/27/2021
+* CS470 Operating Systems Lab 4
+*
+* [Compiling]:
+*   run the following command 'g++ -o agency utilities.cpp Client.cpp -pthread'
+*   from there the program may be ran such as either
+*
+*   1) './agency 127.0.0.1 16000 manual'
+*   2) './agency 127.0.0.1 16000 automatic'
+*/
+
 #include "headers.h"
 
 int PORT;
@@ -221,7 +234,7 @@ int main(int argc, char** argv) {
     if (inet_pton(AF_INET, IP_ADDR, &serv_addr.sin_addr) <= 0) {
         printf("[Client #%d] Error: inet_pton could not establish a valid address family\n", clientPid);
         return 1;
-    } 
+    }
 
     // Attempts to connect to the server over a 12 second interval and exits
     // if a connection could not be made after 4 failed attempts
