@@ -8,6 +8,7 @@ std::string USAGE = "Usage: <Executable> <Port> [<Floors> <Rooms per Floor>]\n"
                     "Note: arguments in []'s are optional but if included must specify both\n";
 
 int** hotelRooms;
+pthread_mutex_t hotelLock;
 
 // Checks if valid numbers were entered and assigns arguments to global variables
 bool isValidArgs(int argc, char** args) {
@@ -53,7 +54,11 @@ bool reservedRoom(int f, int r) {
 }
 
 // Continuously handles booking requests and alerts clients if available or not
-void handleRequests(int connfd) {
+void* handleRequests(void* client_socket) {
+    int connfd = *((int*)client_socket);
+
+    printf("connfd: %d\n", connfd);
+
     char sendBuff[MAX_BUFF];
     memset(sendBuff, 0, sizeof(sendBuff)); 
 
@@ -62,11 +67,11 @@ void handleRequests(int connfd) {
     int gotPid = read(connfd, &clientPid, sizeof(clientPid));
     if (gotPid == 0) {
         printf("\n[Server] Connection to the client was lost...\n");
-        return;
+        return NULL;
     }
     if (gotPid < 0) {
-        fprintf(stderr, "[Server] Error: failed to retrieve pid from client\n%s\n", strerror(errno));
-        return;
+        fprintf(stderr, "[Server] Error: failed to retrieve pid from client\n%d\n", errno);
+        return NULL;
     }
 
     std::cout << "[Server] A connection has been established with [Client #" << clientPid << "]" << std::endl;
@@ -83,15 +88,15 @@ void handleRequests(int connfd) {
     int n = read(connfd, &ACK, sizeof(ACK));
     if (n == 0) {
         printf("\n[Server] Connection to [Client #%d] was lost...\n", clientPid);
-        return;
+        return NULL;
     }
     if (n < 0) {
         fprintf(stderr, "[Server] Error: couldn't recieve the client ACK of welcome message\n%s\n", strerror(errno));
-        return;
+        return NULL;
     }
     if (ACK != 1) {
         printf("[Server] Error: failed to recieve an ACK for the welcome message\n");
-        return;
+        return NULL;
     }
     // [ ******************************* ]
 
@@ -108,11 +113,11 @@ void handleRequests(int connfd) {
         n = read(connfd, roomsRes, sizeof(roomsRes));
         if (n == 0) {
             printf("\n[Server] Connection to [Client #%d] was lost...\n", clientPid);
-            return;
+            return NULL;
         }
         if (n < 0) {
             fprintf(stderr, "[Server] Error: couldn't recieve client room request\n%s\n", strerror(errno));
-            return;
+            return NULL;
         }
 
         printf("\n[Client #%d] would like to request Floor %d, Room %d\n", clientPid, roomsRes[0], roomsRes[1]);
@@ -137,16 +142,16 @@ void handleRequests(int connfd) {
         n = read(connfd, &ACK, sizeof(ACK));
         if (n == 0) {
             printf("\n[Server] Connection to [Client #%d] was lost...\n", clientPid);
-            return;
+            return NULL;
         }
         if (n < 0) {
             fprintf(stderr, "[Server] Error: couldn't recieve the client ACK of the reservation status message\n%s\n", strerror(errno));
-            return;
+            return NULL;
         }
         
         if (ACK != 1) {
             printf("[Server] Error: failed to recieve an ACK for the reservation status message\n");
-            return;
+            return NULL;
         }
         
         // [ ---------------------------------------------------------------------------------- ]
@@ -160,7 +165,7 @@ void handleRequests(int connfd) {
         }
     }
 
-    return;
+    return NULL;
 }
 
 int main(int argc, char** argv) {
@@ -244,15 +249,22 @@ int main(int argc, char** argv) {
             continue;
         }
 
-        // Handles incoming requests from multiple clients
-        handleRequests(connfd);
+        printf("connfd: %d\n", connfd);
 
-        // Closes file descriptor associated with client socket connection
-        if (close(connfd) < 0) {
-            fprintf(stderr, "\n[Server] Error: failed to close file descriptor for client socket connection\n%s\n", strerror(errno));
-        }
-        
+        // Handles incoming requests from multiple clients
+        // handleRequests(connfd);
+        pthread_t t;
+        int *pclient = (int*) malloc(sizeof(int));
+
+        pthread_create(&t, NULL, handleRequests, &connfd);
         sleep(1);
+    }
+
+    //pthread_join(t, NULL);
+
+    // Closes file descriptor associated with client socket connection
+    if (close(connfd) < 0) {
+        fprintf(stderr, "\n[Server] Error: failed to close file descriptor for client socket connection\n%s\n", strerror(errno));
     }
 
     std::cout << "[ ---------- Server Offline ---------- ]" << std::endl;
