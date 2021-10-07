@@ -1,5 +1,4 @@
 # CS470-Lab4
-A multi-threaded server and client sockets program to simulate hotel booking (as the server) and booking agencies (as the clients).
 
 [Compiling & Execution]
  
